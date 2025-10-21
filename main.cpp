@@ -1,16 +1,13 @@
 ﻿#include <iostream>
 #include <string>
 #include "Calculator.h"
+#include "tests.h" 
 #include <locale>
-
-void runTests();
 
 int main() {
     setlocale(LC_ALL, "Russian");
-#ifdef _DEBUG
     runTests();
 
-#endif
     std::cout << "Введите выражение или 'exit':" << std::endl;
 
     Calculator calc;
@@ -26,7 +23,7 @@ int main() {
         }
 
         try {
-            double result = calc.evaluate(input);
+            double result = calc.solve(input);
             std::cout << "= " << result << std::endl;
         }
         catch (const std::exception& ex) {

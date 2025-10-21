@@ -7,7 +7,7 @@ class Calculator {
 public:
     Calculator() = default;
     ~Calculator() = default;
-    double evaluate(const std::string& expr);
+    double solve(const std::string& expr);
 };
 
 #endif

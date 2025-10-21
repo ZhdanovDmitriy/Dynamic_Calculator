@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include <string>
 
-double Calculator::evaluate(const std::string& expr) {
+double Calculator::solve(const std::string& expr) {
     if (expr.empty()) {
         throw std::runtime_error("Пустое выражение");
     }
