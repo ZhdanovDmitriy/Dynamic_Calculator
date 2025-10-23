@@ -4,6 +4,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
+#include <cmath>
 
 void Parser::setAllowedOperators(const std::vector<std::string>& ops) {
     allowedOperators = ops;
@@ -33,167 +34,119 @@ bool Parser::isLeftAssociative(const std::string& op) const {
 
 std::vector<std::string> Parser::tokenize(const std::string& expression) const {
     std::vector<std::string> tokens;
-    std::string token;
-    for (size_t i = 0; i < expression.size();) {
-        if (std::isspace(expression[i])) {
-            ++i;
-            continue;
-        }
+    size_t i = 0;
+
+    while (i < expression.size()) {
+        if (std::isspace(expression[i])) { i++; continue; }
+
         if (std::isdigit(expression[i]) || (expression[i] == '.' && i + 1 < expression.size() && std::isdigit(expression[i + 1]))) {
-            token.clear();
-            while (i < expression.size() && (std::isdigit(expression[i]) || expression[i] == '.')) {
-                token.push_back(expression[i++]);
-            }
-            tokens.push_back(token);
+            size_t start = i;
+            while (i < expression.size() && (std::isdigit(expression[i]) || expression[i] == '.')) i++;
+            tokens.push_back(expression.substr(start, i - start));
             continue;
         }
+
         if (std::isalpha(expression[i])) {
-            token.clear();
-            while (i < expression.size() && std::isalpha(expression[i])) {
-                token.push_back(expression[i++]);
-            }
-            tokens.push_back(token);
+            size_t start = i;
+            while (i < expression.size() && std::isalpha(expression[i])) i++;
+            tokens.push_back(expression.substr(start, i - start));
             continue;
         }
+
         if (std::string("()+-*/^").find(expression[i]) != std::string::npos) {
-            tokens.emplace_back(1, expression[i++]);
+            if (expression[i] == '-') {
+                if (tokens.empty() || tokens.back() == "(" || isOperator(tokens.back())) {
+                    tokens.push_back("u-");
+                    i++;
+                    continue;
+                }
+            }
+            tokens.push_back(std::string(1, expression[i]));
+            i++;
             continue;
         }
+
         throw std::runtime_error("Недопустимый символ в выражении");
     }
+
     return tokens;
 }
 
 void Parser::validate(const std::string& expression) const {
-    if (expression.empty())
-        throw std::runtime_error("Пустое выражение");
-
+    auto tokens = tokenize(expression);
     int parenBalance = 0;
-    bool expectOperand = true;
 
-    for (size_t i = 0; i < expression.size(); ++i) {
-        char c = expression[i];
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        const std::string& t = tokens[i];
 
-        if (std::isspace(static_cast<unsigned char>(c)))
-            continue;
-
-        if (c == '(') {
-            parenBalance++;
-            expectOperand = true;
-        }
-        else if (c == ')') {
+        if (t == "(") parenBalance++;
+        else if (t == ")") {
             parenBalance--;
-            if (parenBalance < 0)
-                throw std::runtime_error("Лишняя закрывающая скобка");
-            expectOperand = false;
+            if (parenBalance < 0) throw std::runtime_error("Лишняя закрывающая скобка");
         }
-        else if (std::isdigit(c) || c == '.') {
-            while (i + 1 < expression.size() && (std::isdigit(expression[i + 1]) || expression[i + 1] == '.'))
-                ++i;
-            expectOperand = false;
+        else if (isOperator(t) || t == "u-") {
+            if (t != "u-" && !isOperator(t)) throw std::runtime_error("Неизвестный оператор: " + t);
         }
         else {
-            bool matched = false;
-            for (const auto& op : allowedOperators) {
-                size_t len = op.size();
-                if (expression.substr(i, len) == op) {
-                    matched = true;
-                    i += len - 1;
-                    expectOperand = true;
-                    break;
-                }
-            }
-            if (!matched && (c == '-' || c == '+')) {
-                if (expectOperand)
-                    continue;
-            }
-            else if (!matched) {
-                throw std::runtime_error(std::string("Неизвестный оператор или символ: ") + c);
+            if (!isNumber(t) && !isOperator(t)) {
+                if (std::find(allowedOperators.begin(), allowedOperators.end(), t) == allowedOperators.end())
+                    throw std::runtime_error("Неизвестная функция: " + t);
             }
         }
     }
 
-    if (parenBalance != 0)
-        throw std::runtime_error("Несбалансированные скобки");
+    if (parenBalance != 0) throw std::runtime_error("Несбалансированные скобки");
 }
 
 std::vector<std::string> Parser::toPostfix(const std::string& expression) const {
     std::vector<std::string> output;
     std::stack<std::string> ops;
-    std::istringstream iss(expression);
-    std::string token;
+    auto tokens = tokenize(expression);
 
-    auto precedence = [](const std::string& op) {
-        if (op == "+" || op == "-") return 1;
-        if (op == "*" || op == "/") return 2;
-        if (op == "^") return 3;
-        return 4;
-        };
+    auto precedence = [this](const std::string& op) { return getPrecedence(op); };
+    auto isFunction = [this](const std::string& op) { return isOperator(op) && getPrecedence(op) == 4; };
 
-    auto isFunction = [&](const std::string& op) {
-        return (op == "sin" || op == "cos" || op == "ln" || op == "sqrt");
-        };
-
-    for (size_t i = 0; i < expression.size();) {
-        char c = expression[i];
-
-        if (std::isspace(static_cast<unsigned char>(c))) {
-            ++i;
-            continue;
+    for (const auto& token : tokens) {
+        if (isNumber(token)) {
+            output.push_back(token);
         }
-
-        if (std::isdigit(c) || c == '.' ||
-            (c == '-' && (i == 0 || expression[i - 1] == '(' || isFunction(std::string(1, expression[i - 1]))))) {
-            size_t start = i;
-            ++i;
-            while (i < expression.size() && (std::isdigit(expression[i]) || expression[i] == '.'))
-                ++i;
-            output.push_back(expression.substr(start, i - start));
-            continue;
+        else if (token == "u-") {
+            ops.push(token);
         }
-
-        if (std::isalpha(c)) {
-            std::string func;
-            while (i < expression.size() && std::isalpha(expression[i]))
-                func.push_back(expression[i++]);
-            ops.push(func);
-            continue;
+        else if (isFunction(token)) {
+            ops.push(token);
         }
-
-        if (c == '(') {
-            ops.push("(");
-            ++i;
-            continue;
+        else if (isOperator(token)) {
+            while (!ops.empty() && ((isFunction(ops.top())) ||
+                (precedence(ops.top()) > precedence(token)) ||
+                (precedence(ops.top()) == precedence(token) && isLeftAssociative(token)))) {
+                output.push_back(ops.top());
+                ops.pop();
+            }
+            ops.push(token);
         }
-
-        if (c == ')') {
+        else if (token == "(") {
+            ops.push(token);
+        }
+        else if (token == ")") {
             while (!ops.empty() && ops.top() != "(") {
                 output.push_back(ops.top());
                 ops.pop();
             }
-            if (ops.empty())
-                throw std::runtime_error("Лишняя закрывающая скобка");
+            if (ops.empty()) throw std::runtime_error("Лишняя закрывающая скобка");
             ops.pop();
-            if (!ops.empty() && isFunction(ops.top())) {
+            if (!ops.empty() && (isFunction(ops.top()) || ops.top() == "u-")) {
                 output.push_back(ops.top());
                 ops.pop();
             }
-            ++i;
-            continue;
         }
-
-        std::string op(1, c);
-        while (!ops.empty() && precedence(ops.top()) >= precedence(op)) {
-            output.push_back(ops.top());
-            ops.pop();
+        else {
+            throw std::runtime_error("Неизвестный токен: " + token);
         }
-        ops.push(op);
-        ++i;
     }
 
     while (!ops.empty()) {
-        if (ops.top() == "(" || ops.top() == ")")
-            throw std::runtime_error("Несбалансированные скобки");
+        if (ops.top() == "(" || ops.top() == ")") throw std::runtime_error("Несбалансированные скобки");
         output.push_back(ops.top());
         ops.pop();
     }

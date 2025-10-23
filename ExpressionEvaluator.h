@@ -4,21 +4,23 @@
 
 #include "Calculator.h"
 #include "Parser.h"
+#include "PluginLoader.h"
 #include <string>
-#include <vector>
 
 class ExpressionEvaluator {
 public:
-    ExpressionEvaluator();
+    ExpressionEvaluator(const std::string& pluginsDir = "");
     ~ExpressionEvaluator() = default;
 
     void run();
 
 private:
-    std::vector<std::string> loadPlugins();
-
-    Calculator calc;
     Parser parser;
+    Calculator calc;
+    PluginLoader loader;
+
+    std::string determinePluginsDirectory(const std::string& pluginsDir) const;
+    void initialize();
 };
 
 #endif

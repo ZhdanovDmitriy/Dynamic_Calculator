@@ -1,69 +1,18 @@
 #include "Calculator.h"
-#include <stdexcept>
 #include <stack>
-#include <filesystem>
-#include <iostream>
-
-Calculator::Calculator() {
-    loadPlugins();
-}
-
-Calculator::~Calculator() {
-    for (auto& [name, plugin] : loadedFunctions) {
-        if (plugin.handle) FreeLibrary(plugin.handle);
-    }
-}
-
-void Calculator::loadPlugins() {
-#ifdef _DEBUG
-    std::filesystem::path pluginsDir = "plugins/debug";
-#else
-    std::filesystem::path pluginsDir = "plugins/release";
-#endif
-
-    for (const auto& entry : std::filesystem::directory_iterator(pluginsDir)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".dll") {
-            HMODULE hModule = LoadLibraryW(entry.path().wstring().c_str());
-            if (!hModule) {
-                std::cerr << "Ошибка загрузки " << entry.path().filename() << std::endl;
-                std::exit(EXIT_FAILURE);
-            }
-
-            auto func = reinterpret_cast<FuncPtr>(GetProcAddress(hModule, "func"));
-            auto getName = reinterpret_cast<const char* (*)()>(GetProcAddress(hModule, "getName"));
-
-            if (!func || !getName) {
-                std::cerr << "Ошибка: отсутствует func() или getName() в " << entry.path().filename() << std::endl;
-                std::exit(EXIT_FAILURE);
-            }
-
-            const char* name = nullptr;
-            try {
-                name = getName();
-            }
-            catch (...) {
-                std::cerr << "Исключение при вызове getName() в " << entry.path().filename() << std::endl;
-                std::exit(EXIT_FAILURE);
-            }
-
-            if (!name || !*name) {
-                std::cerr << "Ошибка: плагин " << entry.path().filename() << " вернул пустое имя" << std::endl;
-                std::exit(EXIT_FAILURE);
-            }
-
-            Plugin p{ hModule, func };
-            loadedFunctions[name] = p;
-        }
-    }
-
-    if (loadedFunctions.empty()) {
-        std::cerr << "Не найдено ни одной DLL с функцией" << std::endl;
-        std::exit(EXIT_FAILURE);
-    }
-}
+#include <stdexcept>
+#include <cstdlib>
+#include <cmath>
 
 bool Calculator::isOperator(const std::string& token) const {
     return loadedFunctions.find(token) != loadedFunctions.end();
+}
+
+void Calculator::setPlugins(const std::vector<PluginLoader::Plugin>& plugins) {
+    loadedFunctions.clear();
+    for (const auto& p : plugins) {
+        loadedFunctions[p.name] = { p.handle, p.func };
+    }
 }
 
 double Calculator::solve(const std::vector<std::string>& postfix) {
@@ -98,10 +47,12 @@ double Calculator::solve(const std::vector<std::string>& postfix) {
         if (stack.empty()) {
             try {
                 double res = func(b, 0.0);
+                if (std::isnan(res)) throw std::runtime_error("Функция '" + token + "' вернула NaN");
+                if (std::isinf(res)) throw std::runtime_error("Функция '" + token + "' вернула бесконечность");
                 stack.push(res);
             }
             catch (const std::exception& ex) {
-                throw std::runtime_error(std::string("Ошибка в функции '") + token + "': " + ex.what());
+                throw std::runtime_error("Ошибка в функции '" + token + "': " + ex.what());
             }
             continue;
         }
@@ -111,10 +62,12 @@ double Calculator::solve(const std::vector<std::string>& postfix) {
 
         try {
             double res = func(a, b);
+            if (std::isnan(res)) throw std::runtime_error("Функция '" + token + "' вернула NaN");
+            if (std::isinf(res)) throw std::runtime_error("Функция '" + token + "' вернула бесконечность");
             stack.push(res);
         }
         catch (const std::exception& ex) {
-            throw std::runtime_error(std::string("Ошибка в функции '") + token + "': " + ex.what());
+            throw std::runtime_error("Ошибка в функции '" + token + "': " + ex.what());
         }
     }
 
