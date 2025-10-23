@@ -7,10 +7,6 @@
 
 typedef double(*FuncPtr)(double, double);
 
-double callFunc(FuncPtr func, double a, double b) {
-    return func(a, b);
-}
-
 void runTests() {
 #ifdef _DEBUG
     std::cout << "Текущий каталог: " << std::filesystem::current_path() << std::endl;
