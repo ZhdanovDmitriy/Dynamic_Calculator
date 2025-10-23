@@ -6,6 +6,7 @@
 #include <filesystem>
 
 typedef double(*FuncPtr)(double, double);
+typedef const char* (*GetNamePtr)();
 
 void runTests() {
 #ifdef _DEBUG
@@ -28,7 +29,7 @@ void runTests() {
         if (entry.is_regular_file() && entry.path().extension() == ".dll") {
             const auto& pluginPath = entry.path();
 #ifdef _DEBUG
-            std::cout << "Проверяется DLL: " << pluginPath << std::endl;
+            std::cout << "Проверяется DLL: " << pluginPath.filename() << std::endl;
 #endif
 
             HMODULE hModule = LoadLibraryW(pluginPath.wstring().c_str());
@@ -53,6 +54,44 @@ void runTests() {
                 allPluginsOk = false;
                 continue;
             }
+
+            GetNamePtr getName = reinterpret_cast<GetNamePtr>(GetProcAddress(hModule, "getName"));
+            if (!getName) {
+#ifdef _DEBUG
+                std::cerr << "Ошибка: функция 'getName' не найдена в " << pluginPath << std::endl;
+#else
+                std::cerr << "Ошибка подключения имени функции DLL" << std::endl;
+#endif
+                FreeLibrary(hModule);
+                allPluginsOk = false;
+                continue;
+            }
+
+            const char* name = nullptr;
+            try {
+                name = getName();
+            }
+            catch (...) {
+                std::cerr << "Исключение при вызове getName() в " << pluginPath << std::endl;
+                allPluginsOk = false;
+                FreeLibrary(hModule);
+                continue;
+            }
+
+            if (!name || std::string(name).empty()) {
+#ifdef _DEBUG
+                std::cerr << "Ошибка: getName() вернула пустое имя в " << pluginPath << std::endl;
+#else
+                std::cerr << "Ошибка: имя функции отсутствует" << std::endl;
+#endif
+                allPluginsOk = false;
+                FreeLibrary(hModule);
+                continue;
+            }
+
+#ifdef _DEBUG
+            std::cout << "Функция '" << name << "' успешно загружена." << std::endl;
+#endif
 
             FreeLibrary(hModule);
         }

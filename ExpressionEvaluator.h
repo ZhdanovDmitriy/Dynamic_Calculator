@@ -5,6 +5,7 @@
 #include "Calculator.h"
 #include "Parser.h"
 #include <string>
+#include <vector>
 
 class ExpressionEvaluator {
 public:
@@ -14,6 +15,8 @@ public:
     void run();
 
 private:
+    std::vector<std::string> loadPlugins();
+
     Calculator calc;
     Parser parser;
 };
