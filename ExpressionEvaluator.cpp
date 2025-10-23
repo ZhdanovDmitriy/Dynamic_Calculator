@@ -1,4 +1,5 @@
 #include "ExpressionEvaluator.h"
+#include "Parser.h"
 #include <iostream>
 #include <filesystem>
 #include <windows.h>
@@ -6,6 +7,9 @@
 #include <string>
 
 typedef const char* (*GetNamePtr)();
+
+ExpressionEvaluator::ExpressionEvaluator() {
+}
 
 std::vector<std::string> ExpressionEvaluator::loadPlugins() {
     std::vector<std::string> availableOperators;
@@ -65,6 +69,8 @@ std::vector<std::string> ExpressionEvaluator::loadPlugins() {
 void ExpressionEvaluator::run() {
     auto operators = loadPlugins();
 
+    parser.setAllowedOperators(operators);
+
     std::string input;
     while (true) {
         std::cout << "> ";
@@ -72,9 +78,9 @@ void ExpressionEvaluator::run() {
         if (input == "exit") break;
 
         try {
-            auto tokens = parser.tokenize(input);
-            parser.validate(tokens);
-            double result = calc.solve(input);
+            parser.validate(input);
+            auto postfix = parser.toPostfix(input);
+            double result = calc.solve(postfix);
             std::cout << "= " << result << std::endl;
         }
         catch (const std::exception& ex) {

@@ -4,7 +4,6 @@
 
 #include <string>
 #include <vector>
-#include <unordered_map>
 
 class Parser {
 public:
@@ -17,14 +16,14 @@ public:
     std::vector<std::string> toPostfix(const std::string& expression) const;
 
 private:
-    std::vector<std::string> tokenize(const std::string& expression) const;
+    std::vector<std::string> allowedOperators;
+
     bool isNumber(const std::string& token) const;
     bool isOperator(const std::string& token) const;
-    int getPrecedence(const std::string& op) const;
-    bool isLeftAssociative(const std::string& op) const;
-
-    std::vector<std::string> allowedOperators;
+    bool isFunction(const std::string& token) const;
+    int getPrecedence(const std::string& token) const;
+    bool isLeftAssociative(const std::string& token) const;
+    std::vector<std::string> tokenize(const std::string& expression) const;
 };
 
 #endif
-
