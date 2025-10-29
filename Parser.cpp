@@ -10,11 +10,21 @@ void Parser::setAllowedOperators(const std::vector<std::string>& ops) {
     allowedOperators = ops;
 }
 
-bool Parser::isNumber(const std::string& token) const {
-    if (token.empty()) return false;
-    char* end;
-    std::strtod(token.c_str(), &end);
-    return *end == '\0';
+bool Parser::isNumber(const std::string& s) const {
+    if (s.empty()) return false;
+    size_t i = 0;
+    bool hasDigits = false;
+    if (i < s.size() && s[i] == '.') {
+        ++i;
+        while (i < s.size() && std::isdigit(s[i])) { ++i; hasDigits = true; }
+        return hasDigits && i == s.size();
+    }
+    while (i < s.size() && std::isdigit(s[i])) { ++i; hasDigits = true; }
+    if (i < s.size() && s[i] == '.') {
+        ++i;
+        while (i < s.size() && std::isdigit(s[i])) { ++i; hasDigits = true; }
+    }
+    return hasDigits && i == s.size();
 }
 
 bool Parser::isOperator(const std::string& token) const {
@@ -22,14 +32,16 @@ bool Parser::isOperator(const std::string& token) const {
 }
 
 int Parser::getPrecedence(const std::string& op) const {
+    if (op == "(" || op == ")") return 0;
     if (op == "+" || op == "-") return 1;
     if (op == "*" || op == "/") return 2;
     if (op == "^") return 3;
-    return 4;
+    if (op == "u-") return 4;
+    return 5;
 }
 
 bool Parser::isLeftAssociative(const std::string& op) const {
-    return op != "^";
+    return op != "^" && op != "u-";
 }
 
 std::vector<std::string> Parser::tokenize(const std::string& expression) const {
@@ -37,12 +49,19 @@ std::vector<std::string> Parser::tokenize(const std::string& expression) const {
     size_t i = 0;
 
     while (i < expression.size()) {
-        if (std::isspace(expression[i])) { i++; continue; }
+        if (std::isspace(expression[i])) {
+            i++;
+            continue;
+        }
 
-        if (std::isdigit(expression[i]) || (expression[i] == '.' && i + 1 < expression.size() && std::isdigit(expression[i + 1]))) {
+        if (std::isdigit(expression[i]) ||
+            ((expression[i] == '.' || expression[i] == ',') && i + 1 < expression.size() && std::isdigit(expression[i + 1])))
+        {
             size_t start = i;
-            while (i < expression.size() && (std::isdigit(expression[i]) || expression[i] == '.')) i++;
-            tokens.push_back(expression.substr(start, i - start));
+            while (i < expression.size() && (std::isdigit(expression[i]) || expression[i] == '.' || expression[i] == ',')) i++;
+            std::string token = expression.substr(start, i - start);
+            std::replace(token.begin(), token.end(), ',', '.');
+            tokens.push_back(token);
             continue;
         }
 
@@ -55,7 +74,7 @@ std::vector<std::string> Parser::tokenize(const std::string& expression) const {
 
         if (std::string("()+-*/^").find(expression[i]) != std::string::npos) {
             if (expression[i] == '-') {
-                if (tokens.empty() || tokens.back() == "(" || isOperator(tokens.back())) {
+                if (tokens.empty() || tokens.back() == "(" || isOperator(tokens.back()) || tokens.back() == "u-") {
                     tokens.push_back("u-");
                     i++;
                     continue;
@@ -72,6 +91,7 @@ std::vector<std::string> Parser::tokenize(const std::string& expression) const {
     return tokens;
 }
 
+
 void Parser::validate(const std::string& expression) const {
     auto tokens = tokenize(expression);
     int parenBalance = 0;
@@ -85,7 +105,8 @@ void Parser::validate(const std::string& expression) const {
             if (parenBalance < 0) throw std::runtime_error("Лишняя закрывающая скобка");
         }
         else if (isOperator(t) || t == "u-") {
-            if (t != "u-" && !isOperator(t)) throw std::runtime_error("Неизвестный оператор: " + t);
+            if (t != "u-" && !isOperator(t))
+                throw std::runtime_error("Неизвестный оператор: " + t);
         }
         else {
             if (!isNumber(t) && !isOperator(t)) {
@@ -104,22 +125,25 @@ std::vector<std::string> Parser::toPostfix(const std::string& expression) const 
     auto tokens = tokenize(expression);
 
     auto precedence = [this](const std::string& op) { return getPrecedence(op); };
-    auto isFunction = [this](const std::string& op) { return isOperator(op) && getPrecedence(op) == 4; };
+    auto isFunction = [this](const std::string& op) {
+        return isOperator(op) && getPrecedence(op) >= 4 && op != "u-";
+        };
 
     for (const auto& token : tokens) {
         if (isNumber(token)) {
             output.push_back(token);
         }
-        else if (token == "u-") {
-            ops.push(token);
-        }
         else if (isFunction(token)) {
             ops.push(token);
         }
+        else if (token == "u-") {
+            ops.push(token);
+        }
         else if (isOperator(token)) {
-            while (!ops.empty() && ((isFunction(ops.top())) ||
-                (precedence(ops.top()) > precedence(token)) ||
-                (precedence(ops.top()) == precedence(token) && isLeftAssociative(token)))) {
+            while (!ops.empty() &&
+                ((isFunction(ops.top())) ||
+                    (precedence(ops.top()) > precedence(token)) ||
+                    (precedence(ops.top()) == precedence(token) && isLeftAssociative(token)))) {
                 output.push_back(ops.top());
                 ops.pop();
             }
@@ -135,7 +159,7 @@ std::vector<std::string> Parser::toPostfix(const std::string& expression) const 
             }
             if (ops.empty()) throw std::runtime_error("Лишняя закрывающая скобка");
             ops.pop();
-            if (!ops.empty() && (isFunction(ops.top()) || ops.top() == "u-")) {
+            if (!ops.empty() && isFunction(ops.top())) {
                 output.push_back(ops.top());
                 ops.pop();
             }

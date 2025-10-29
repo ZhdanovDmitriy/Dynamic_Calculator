@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <cstdlib>
 #include <cmath>
+#include <sstream>
 
 bool Calculator::isOperator(const std::string& token) const {
     return loadedFunctions.find(token) != loadedFunctions.end();
@@ -22,10 +23,25 @@ double Calculator::solve(const std::vector<std::string>& postfix) {
     std::stack<double> stack;
 
     for (const auto& token : postfix) {
+        if (token == "u-") {
+            if (stack.empty())
+                throw std::runtime_error("Недостаточно аргументов для унарного минуса");
+            double val = stack.top(); stack.pop();
+            stack.push(-val);
+            continue;
+        }
+
         if (!isOperator(token)) {
-            char* end;
-            double val = std::strtod(token.c_str(), &end);
-            if (*end != '\0') throw std::runtime_error("Некорректное число: " + token);
+            std::istringstream iss(token);
+            iss.imbue(std::locale::classic());
+            double val;
+            if (!(iss >> val)) {
+                throw std::runtime_error("Некорректное число: " + token);
+            }
+            char remaining;
+            if (iss >> remaining) {
+                throw std::runtime_error("Некорректное число: " + token);
+            }
             stack.push(val);
             continue;
         }

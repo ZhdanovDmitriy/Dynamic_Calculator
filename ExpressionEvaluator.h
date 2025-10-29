@@ -20,7 +20,6 @@ private:
     PluginLoader loader;
 
     std::string determinePluginsDirectory(const std::string& pluginsDir) const;
-    void initialize();
 };
 
 #endif
